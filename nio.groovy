@@ -3,6 +3,7 @@ import java.nio.channels.SelectionKey
 import java.nio.channels.Selector
 import java.nio.channels.ServerSocketChannel
 import java.nio.channels.SocketChannel
+import java.nio.charset.Charset
 
 HTTP_PORT = 9999
 HTTP_ROOT = '/Users/kanshan/work/gitProjects/Coder'
@@ -67,7 +68,16 @@ def handler(wrapper){
         buffer.append("\r\n")
         def file = new File("${HTTP_ROOT}${File.separator}${wrapper.router}")
         if(!file.isDirectory() && file.exists() && file.canRead()){
-            buffer.append(file.text)
+            def fileInput = new FileInputStream(file)
+            def channel = fileInput.getChannel()
+            def byteBuffer = ByteBuffer.allocate(1024)
+            while(channel.read(byteBuffer) != -1){
+                byteBuffer.flip()
+                def charBuffer = Charset.forName("UTF-8").decode(byteBuffer)
+                buffer.append(charBuffer.flip().array())
+                byteBuffer.clear()
+                charBuffer.clear()
+            }
         }
     }
     return buffer.toString()
