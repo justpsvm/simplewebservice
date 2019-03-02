@@ -13,28 +13,42 @@ def selector = Selector.open()
 
 channel.bind(new InetSocketAddress(HTTP_PORT))
 channel.configureBlocking(false)
-channel.register(selector, SelectionKey.OP_ACCEPT)
+channel.register(selector,SelectionKey.OP_ACCEPT)
+
+
 while(true){
     if(selector.select(1000) == 0) continue
 
     def keys = selector.selectedKeys().iterator()
     while(keys.hasNext()){
         def key = keys.next()
-        def socket = ((ServerSocketChannel) key.channel()).accept()
-        if(key.isAcceptable()){
-            def byteBuffer = ByteBuffer.allocate(1024 * 1024)
-            def html = handler(parserRequest(socket))
-            byteBuffer.put(html.getBytes())
-            byteBuffer.flip()
-            while(byteBuffer.hasRemaining()){
-                socket.write(byteBuffer)
-            }
-            byteBuffer.clear()
-        }
-        socket.close()
         keys.remove()
+
+        if(key.isAcceptable()){
+            def socket = (SocketChannel) channel.accept()
+            socket.configureBlocking(false)
+            socket.register(selector,SelectionKey.OP_READ)
+        } else if(key.isReadable()){
+            def socket = (SocketChannel) key.channel()
+            def html = handler(parserRequest(socket))
+            if(html){
+                key.attach(html)
+                key.interestOps(SelectionKey.OP_WRITE)
+            }
+        }else if(key.isWritable()){
+            def socket = (SocketChannel) key.channel()
+            def response = (String)key.attachment()
+            if(response){
+                ByteBuffer byteBuffer = ByteBuffer.wrap(response.getBytes())
+                socket.write(byteBuffer)
+                println response
+                socket.close()
+            }
+
+        }
     }
 }
+
 def parserRequest(SocketChannel socket){
     def protocol = []
 
@@ -73,7 +87,7 @@ def handler(wrapper){
             def byteBuffer = ByteBuffer.allocate(1024)
             while(channel.read(byteBuffer) != -1){
                 byteBuffer.flip()
-                def charBuffer = Charset.forName("UTF-8").decode(byteBuffer)
+                def charBuffer = Charset.forName("UTF8").decode(byteBuffer)
                 buffer.append(charBuffer.flip().array())
                 byteBuffer.clear()
                 charBuffer.clear()
